@@ -1,0 +1,161 @@
+package main
+
+import (
+	"flag"
+	"fmt"
+	"log"
+	"os"
+	"strings"
+	"time"
+)
+
+func main() {
+	if len(os.Args) < 2 {
+		printUsage()
+		os.Exit(1)
+	}
+
+	cmd := os.Args[1]
+	args := os.Args[2:]
+
+	switch cmd {
+	case "daemon":
+		runDaemon(args)
+	case "whohas":
+		runWhohas(args)
+	case "fetch":
+		runFetch(args)
+	case "list":
+		runList(args)
+	default:
+		fmt.Printf("Unknown command: %s\n", cmd)
+		printUsage()
+		os.Exit(1)
+	}
+}
+
+func printUsage() {
+	fmt.Println("Usage: p2pfs <command> [options]")
+	fmt.Println("Commands:")
+	fmt.Println("  daemon  Run the p2pfs daemon")
+	fmt.Println("  whohas  Find who has a specific file")
+	fmt.Println("  fetch   Download a file")
+	fmt.Println("  list    List files served by a peer")
+}
+
+func runDaemon(args []string) {
+	fs := flag.NewFlagSet("daemon", flag.ExitOnError)
+	// fs.String(flag, default, helper description)
+	listenAddr := fs.String("listen", "/ip4/0.0.0.0/tcp/4001", "Listen multiaddr") // node listens at IP:port
+	exportDir := fs.String("export_dir", "./files_to_serve", "Directory to serve files from")
+	bootstrapOpt := fs.String("bootstrap", "", "Comma-separated list of bootstrap multiaddrs") // node that can be used to bootstrap the starting node
+	rpcOpt := fs.String("rpc", "/tmp/p2pfs.sock", "RPC Unix socket path")                      // rpc socket to issue commands to the running daemon
+
+	fs.Parse(args)
+
+	var bootstrapAddrs []string
+	if *bootstrapOpt != "" {
+		bootstrapAddrs = strings.Split(*bootstrapOpt, ",")
+	}
+
+	log.Printf("Starting daemon...")
+	log.Printf("Listen addr: %s", *listenAddr)
+	log.Printf("Export dir: %s", *exportDir)
+	log.Printf("Bootstrap peers: %v", bootstrapAddrs)
+
+	// Create export_dir if it doesn't exist
+	if err := os.MkdirAll(*exportDir, 0755); err != nil {
+		log.Fatalf("Failed to create export directory: %v", err)
+	}
+
+	// Start node, join discovery
+	node, err := NewNode(*listenAddr, *exportDir, *rpcOpt, bootstrapAddrs)
+	if err != nil {
+		log.Fatalf("Failed to create node: %v", err)
+	}
+	defer node.Close()
+
+	log.Printf("Daemon running. Press Ctrl+C to exit.")
+
+	// Keep daemon alive by blocking forever, note that NewNode is async
+	select {}
+}
+
+// node X broadcasts whohas
+func runWhohas(args []string) {
+	fs := flag.NewFlagSet("whohas", flag.ExitOnError)
+	rpcOpt := fs.String("rpc", "/tmp/p2pfs.sock", "RPC Unix socket path")
+	fs.Parse(args)
+
+	if fs.NArg() < 1 {
+		fmt.Println("Usage: p2pfs whohas [--rpc <socket>] <filename>")
+		os.Exit(1)
+	}
+
+	filename := fs.Arg(0)
+	fmt.Printf("Querying who has: %s\n", filename)
+
+	// connect to daemon to issue commands
+	client := NewClient(*rpcOpt)
+	peers, err := client.Whohas(filename)
+
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
+	if len(peers) == 0 {
+		fmt.Println("No providers found.")
+	} else {
+		fmt.Printf("Providers for %s:\n", filename)
+		for _, p := range peers {
+			fmt.Printf("  %s\n", p)
+		}
+	}
+}
+
+// download file from peer X
+func runFetch(args []string) {
+	fs := flag.NewFlagSet("fetch", flag.ExitOnError)
+	fromPeer := fs.String("from", "", "Specific peer ID to fetch from (optional)")
+	rpcOpt := fs.String("rpc", "/tmp/p2pfs.sock", "RPC Unix socket path")
+	fs.Parse(args)
+
+	if fs.NArg() < 1 {
+		fmt.Println("Usage: p2pfs fetch <filename> [--from <peer_id>]")
+		os.Exit(1)
+	}
+	filename := fs.Arg(0)
+
+	log.Printf("Fetching: %s", filename)
+	client := NewClient(*rpcOpt)
+
+	startTime := time.Now()
+	err := client.Fetch(filename, *fromPeer)
+	if err != nil {
+		log.Fatalf("Fetch failed: %v", err)
+	}
+	log.Printf("Fetch complete in %v", time.Since(startTime))
+}
+
+// list the files owned by node X
+func runList(args []string) {
+	fs := flag.NewFlagSet("list", flag.ExitOnError)
+	peerAddr := fs.String("peer", "", "Target peer multiaddr")
+	rpcOpt := fs.String("rpc", "/tmp/p2pfs.sock", "RPC Unix socket path")
+	fs.Parse(args)
+
+	if *peerAddr == "" {
+		fmt.Println("Usage: p2pfs list --peer <multiaddr>")
+		os.Exit(1)
+	}
+
+	log.Printf("Listing files for %s", *peerAddr)
+	client := NewClient(*rpcOpt)
+	files, err := client.List(*peerAddr)
+	if err != nil {
+		log.Fatalf("List failed: %v", err)
+	}
+	fmt.Println("Files served:")
+	for _, f := range files {
+		fmt.Printf("  - %s\n", f)
+	}
+}
