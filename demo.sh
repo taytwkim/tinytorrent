@@ -44,9 +44,10 @@ setup() {
     ./p2pfs daemon -listen /ip4/127.0.0.1/tcp/4003 -export_dir ./peerC_export -rpc /tmp/p2pfsC.sock -bootstrap "$B_ADDR" > peerC.log 2>&1 &
     
     echo -e "\n${BLUE}All peers started! Wait a few seconds for GossipSub mesh to build (~5-10s)...${NC}"
-    echo -e "You can now run commands against Peer C to find and fetch foo.txt:"
-    echo -e "  ./p2pfs whohas --rpc /tmp/p2pfsC.sock foo.txt"
-    echo -e "  ./p2pfs fetch  --rpc /tmp/p2pfsC.sock foo.txt"
+    echo -e "You can now run commands against Peer C to inspect files, find the CID for foo.txt, and fetch it:"
+    echo -e "  ./p2pfs list   --rpc /tmp/p2pfsC.sock --peer <REMOTE_MULTIADDR>"
+    echo -e "  ./p2pfs whohas --rpc /tmp/p2pfsC.sock <CID>"
+    echo -e "  ./p2pfs fetch  --rpc /tmp/p2pfsC.sock <CID>"
     echo -e "  cat peerC_export/foo.txt\n"
 }
 

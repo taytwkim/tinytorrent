@@ -10,7 +10,7 @@ This MVP includes two primary protocols:
 
 - **Index Protocol (`/p2pfs/index/1.0.0`)**: Stream-based request protocol allowing peers to manually verify what files a target peer is serving.
 
-It uses **GossipSub** (`p2pfs/announce/1.0.0`) to run periodic broadcasts announcing local files. Peers ingest these announcements to maintain an ephemeral `providers` map in-memory.
+It uses **GossipSub** (`p2pfs/announce/1.0.0`) to run periodic broadcasts announcing local files. Each file is identified by a CID derived from its raw bytes, while filenames are kept as metadata for display and local saves. Peers ingest these announcements to maintain an ephemeral `providers` map in-memory.
 
 ## Getting Started
 
@@ -43,18 +43,18 @@ To bootstrap a new daemon, pass a comma-separated list of known `/ip4/.../p2p/<P
 
 Once the daemon is up and a network has been established over GossipSub, query and fetch using the CLI:
 
-- `whohas`: Ask local daemon's provider index who has a specific file.
+- `whohas`: Ask local daemon's provider index who has a specific CID.
 ```bash
-./p2pfs whohas foo.txt
+./p2pfs whohas <CID>
 ```
 
-- `fetch`: Tell daemon to download a file from the network into its local `export_dir`.
+- `fetch`: Tell daemon to download content by CID from the network into its local `export_dir`.
 
 ```bash
-./p2pfs fetch foo.txt
+./p2pfs fetch <CID>
 ```
 
-- `list`: Connect to a remote peer explicitly and use the Index protocol to verify what they are serving.
+- `list`: Connect to a remote peer explicitly and use the Index protocol to verify what they are serving, including filename, CID, and size.
 
 ```bash
 ./p2pfs list --peer <REMOTE_MULTIADDR>
@@ -67,11 +67,12 @@ To run the demo (which spins up Peer A, Peer B, and Peer C, and generates a test
 ./demo.sh start
 ```
 
-Watch the terminal as it starts the daemons. Once it completes, we can manually run the verification prompts against Peer C to watch GossipSub discovery pull from Peer A.
+Watch the terminal as it starts the daemons. Once it completes, first list a remote peer to see the CID for `foo.txt`, then use that CID from Peer C.
 
 ```bash
-./p2pfs whohas --rpc /tmp/p2pfsC.sock foo.txt
-./p2pfs fetch  --rpc /tmp/p2pfsC.sock foo.txt
+./p2pfs list   --rpc /tmp/p2pfsC.sock --peer <REMOTE_MULTIADDR>
+./p2pfs whohas --rpc /tmp/p2pfsC.sock <CID>
+./p2pfs fetch  --rpc /tmp/p2pfsC.sock <CID>
 cat peerC_export/foo.txt
 ```
 

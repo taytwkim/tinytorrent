@@ -13,7 +13,6 @@ import (
 
 /*
  * Index Protocol, stream-based request protocol allowing peers to manually verify what files a target peer is serving.
- *
  * setupIndexProtocol is called once in node startup.
  * doList issues the list request, and handleIndexStream is the handler.
  */
@@ -21,21 +20,27 @@ import (
 const indexProtocol = "/p2pfs/index/1.0.0"
 
 type IndexRequest struct {
-	Op       string `json:"op"` // "LIST" or "HAS"
-	Filename string `json:"filename,omitempty"`
+	Op  string `json:"op"` // "LIST" or "HAS"
+	CID string `json:"cid,omitempty"`
+}
+
+type IndexFile struct {
+	CID      string `json:"cid"`
+	Filename string `json:"filename"`
+	Size     int64  `json:"size"`
 }
 
 type IndexResponse struct {
-	Files []string `json:"files,omitempty"`
-	Has   bool     `json:"has,omitempty"`
-	Error string   `json:"error,omitempty"`
+	Files []IndexFile `json:"files,omitempty"`
+	Has   bool        `json:"has,omitempty"`
+	Error string      `json:"error,omitempty"`
 }
 
 func (n *Node) setupIndexProtocol() {
 	n.Host.SetStreamHandler(indexProtocol, n.handleIndexStream)
 }
 
-func (n *Node) doList(targetAddr string) ([]string, error) {
+func (n *Node) doList(targetAddr string) ([]IndexFile, error) {
 	maddr, err := multiaddr.NewMultiaddr(targetAddr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid multiaddr: %w", err)
@@ -92,9 +97,13 @@ func (n *Node) handleIndexStream(s network.Stream) {
 	case "LIST":
 		log.Printf("Received LIST request from %s", s.Conn().RemotePeer())
 		n.localFilesLock.RLock()
-		var files []string
-		for f := range n.LocalFiles {
-			files = append(files, f)
+		var files []IndexFile
+		for _, f := range n.LocalFiles {
+			files = append(files, IndexFile{
+				CID:      f.CID,
+				Filename: f.Filename,
+				Size:     f.Size,
+			})
 		}
 		n.localFilesLock.RUnlock()
 
@@ -102,7 +111,7 @@ func (n *Node) handleIndexStream(s network.Stream) {
 
 	case "HAS":
 		n.localFilesLock.RLock()
-		_, exists := n.LocalFiles[req.Filename]
+		_, exists := n.LocalFiles[req.CID]
 		n.localFilesLock.RUnlock()
 
 		encoder.Encode(IndexResponse{Has: exists})

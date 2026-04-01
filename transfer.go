@@ -17,7 +17,6 @@ import (
 
 /*
  * Transfer Protocol, stream-based protocol handling file downloads.
- *
  * setupTransferProtocol is called once in node startup.
  * doFetch issues the transfer request, and handleTransferStream is the handler.
  */
@@ -25,22 +24,24 @@ import (
 const transferProtocol = "/p2pfs/get/1.0.0"
 
 type TransferRequest struct {
-	Filename string `json:"filename"`
+	CID string `json:"cid"`
 }
 
 type TransferResponse struct {
 	Error    string `json:"error,omitempty"`
 	Filesize int64  `json:"filesize,omitempty"`
+	Filename string `json:"filename,omitempty"`
 }
 
 func (n *Node) setupTransferProtocol() {
 	n.Host.SetStreamHandler(transferProtocol, n.handleTransferStream)
 }
 
-func (n *Node) doFetch(filename string, targetPeerID string) error {
+func (n *Node) doFetch(cid string, targetPeerID string) error {
 	var target peer.ID
 	var err error
 	var providerInfo peer.AddrInfo
+	var remoteFilename string
 
 	if targetPeerID != "" {
 		target, err = peer.Decode(targetPeerID)
@@ -48,24 +49,25 @@ func (n *Node) doFetch(filename string, targetPeerID string) error {
 			return fmt.Errorf("invalid peer id: %v", err)
 		}
 	} else {
-		// Find a peer from our providers index
+		// Find a peer from our providers index using CID as the content identity.
 		n.providersLock.RLock()
-		peers, ok := n.Providers[filename]
+		peers, ok := n.Providers[cid]
 		n.providersLock.RUnlock()
 
 		if !ok || len(peers) == 0 {
-			return errors.New("no providers known for this file. Use 'whohas' first")
+			return errors.New("no providers known for this CID. Use 'whohas' first")
 		}
 
 		// Just pick the first one for MVP
 		for p, prov := range peers {
 			target = p
 			providerInfo = prov.Info
+			remoteFilename = prov.Filename
 			break
 		}
 	}
 
-	log.Printf("Fetching %s from %s", filename, target)
+	log.Printf("Fetching %s from %s", cid, target)
 
 	ctx := context.Background() // For transfer, we just use background, but real app might want timeout
 
@@ -82,7 +84,7 @@ func (n *Node) doFetch(filename string, targetPeerID string) error {
 	defer s.Close()
 
 	// Send request
-	req := TransferRequest{Filename: filename}
+	req := TransferRequest{CID: cid}
 	encoder := json.NewEncoder(s)
 	if err := encoder.Encode(req); err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
@@ -101,9 +103,12 @@ func (n *Node) doFetch(filename string, targetPeerID string) error {
 
 	log.Printf("Incoming filesize: %d bytes", resp.Filesize)
 
-	// Save to temp file
+	filename := safeDownloadFilename(resp.Filename, remoteFilename, cid)
+
+	// Save to a temp file first, then verify the bytes really match the CID we
+	// requested before exposing them as a finished local object.
 	tempPath := filepath.Join(n.ExportDir, filename+".downloading")
-	finalPath := filepath.Join(n.ExportDir, filename)
+	finalPath := uniqueDownloadPath(filepath.Join(n.ExportDir, filename))
 
 	outFile, err := os.Create(tempPath)
 	if err != nil {
@@ -124,6 +129,16 @@ func (n *Node) doFetch(filename string, targetPeerID string) error {
 		return fmt.Errorf("incomplete file transfer: got %d, expected %d", written, resp.Filesize)
 	}
 
+	computedCID, err := ComputeCID(tempPath)
+	if err != nil {
+		os.Remove(tempPath)
+		return fmt.Errorf("failed to compute CID after download: %w", err)
+	}
+	if computedCID != cid {
+		os.Remove(tempPath)
+		return fmt.Errorf("downloaded bytes do not match requested CID: got %s", computedCID)
+	}
+
 	// Rename final
 	if err := os.Rename(tempPath, finalPath); err != nil {
 		return fmt.Errorf("failed to rename finalized file: %w", err)
@@ -131,10 +146,15 @@ func (n *Node) doFetch(filename string, targetPeerID string) error {
 
 	// Update local files map so we instantly serve it
 	n.localFilesLock.Lock()
-	n.LocalFiles[filename] = resp.Filesize
+	n.LocalFiles[cid] = LocalFileRecord{
+		CID:      cid,
+		Filename: filepath.Base(finalPath),
+		Path:     finalPath,
+		Size:     resp.Filesize,
+	}
 	n.localFilesLock.Unlock()
 
-	log.Printf("Successfully downloaded %s", filename)
+	log.Printf("Successfully downloaded %s as %s", cid, filepath.Base(finalPath))
 	return nil
 }
 
@@ -151,19 +171,11 @@ func (n *Node) handleTransferStream(s network.Stream) {
 
 	encoder := json.NewEncoder(s)
 
-	log.Printf("Received GET request for %s from %s", req.Filename, s.Conn().RemotePeer())
-
-	// Safety: reject path traversal or absolute paths
-	if strings.Contains(req.Filename, "/") || strings.Contains(req.Filename, "\\") {
-		encoder.Encode(TransferResponse{Error: "Invalid filename format"})
-		return
-	}
-
-	targetPath := filepath.Join(n.ExportDir, req.Filename)
+	log.Printf("Received GET request for %s from %s", req.CID, s.Conn().RemotePeer())
 
 	// Check if file exists
 	n.localFilesLock.RLock()
-	size, exists := n.LocalFiles[req.Filename]
+	record, exists := n.LocalFiles[req.CID]
 	n.localFilesLock.RUnlock()
 
 	if !exists {
@@ -171,7 +183,7 @@ func (n *Node) handleTransferStream(s network.Stream) {
 		return
 	}
 
-	file, err := os.Open(targetPath)
+	file, err := os.Open(record.Path)
 	if err != nil {
 		encoder.Encode(TransferResponse{Error: "Internal server error"})
 		return
@@ -179,15 +191,50 @@ func (n *Node) handleTransferStream(s network.Stream) {
 	defer file.Close()
 
 	// Send Response Header
-	if err := encoder.Encode(TransferResponse{Filesize: size}); err != nil {
+	if err := encoder.Encode(TransferResponse{Filesize: record.Size, Filename: record.Filename}); err != nil {
 		return
 	}
 
 	// Stream Bytes
 	written, err := io.Copy(s, file)
 	if err != nil {
-		log.Printf("Error sending file %s: %v", req.Filename, err)
+		log.Printf("Error sending CID %s: %v", req.CID, err)
 	} else {
-		log.Printf("Sent %d bytes of %s to %s", written, req.Filename, s.Conn().RemotePeer())
+		log.Printf("Sent %d bytes of CID %s to %s", written, req.CID, s.Conn().RemotePeer())
+	}
+}
+
+func safeDownloadFilename(primaryName, fallbackName, cid string) string {
+	for _, name := range []string{primaryName, fallbackName} {
+		if name == "" {
+			continue
+		}
+		if strings.Contains(name, "/") || strings.Contains(name, "\\") {
+			// safety check to prevent overwriting outside the export directory
+			// don't allow files like ../hello.txt
+			continue
+		}
+		return name
+	}
+	return cid + ".bin"
+}
+
+// make sure we don’t overwrite an existing local file.
+// If the target path is free, it returns it unchanged.
+// If the filename already exists, generate names like name-1.ext, name-2.ext
+func uniqueDownloadPath(path string) string {
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		return path
+	}
+
+	ext := filepath.Ext(path)
+	base := strings.TrimSuffix(filepath.Base(path), ext)
+	dir := filepath.Dir(path)
+
+	for i := 1; ; i++ {
+		candidate := filepath.Join(dir, fmt.Sprintf("%s-%d%s", base, i, ext))
+		if _, err := os.Stat(candidate); errors.Is(err, os.ErrNotExist) {
+			return candidate
+		}
 	}
 }

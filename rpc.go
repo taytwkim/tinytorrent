@@ -24,16 +24,16 @@ import (
 // ============================================================================
 
 type WhohasArgs struct {
-	Filename string
+	CID string
 }
 
 type WhohasReply struct {
-	Peers []string
+	Providers []ProviderInfo
 }
 
 type FetchArgs struct {
-	Filename string
-	PeerID   string
+	CID    string
+	PeerID string
 }
 
 type FetchReply struct {
@@ -45,7 +45,13 @@ type ListArgs struct {
 }
 
 type ListReply struct {
-	Files []string
+	Files []IndexFile
+}
+
+type ProviderInfo struct {
+	PeerID   string
+	Filename string
+	Size     int64
 }
 
 // ============================================================================
@@ -67,20 +73,20 @@ func NewClient(rpcSocket string) *Client {
 	return &Client{rpcClient: c}
 }
 
-func (c *Client) Whohas(filename string) ([]string, error) {
-	args := &WhohasArgs{Filename: filename}
+func (c *Client) Whohas(cid string) ([]ProviderInfo, error) {
+	args := &WhohasArgs{CID: cid}
 	var reply WhohasReply
 	err := c.rpcClient.Call("P2PFSAPI.Whohas", args, &reply)
-	return reply.Peers, err
+	return reply.Providers, err
 }
 
-func (c *Client) Fetch(filename, peerID string) error {
-	args := &FetchArgs{Filename: filename, PeerID: peerID}
+func (c *Client) Fetch(cid, peerID string) error {
+	args := &FetchArgs{CID: cid, PeerID: peerID}
 	var reply FetchReply
 	return c.rpcClient.Call("P2PFSAPI.Fetch", args, &reply)
 }
 
-func (c *Client) List(targetAddr string) ([]string, error) {
+func (c *Client) List(targetAddr string) ([]IndexFile, error) {
 	args := &ListArgs{TargetAddr: targetAddr}
 	var reply ListReply
 	err := c.rpcClient.Call("P2PFSAPI.List", args, &reply)
@@ -104,15 +110,19 @@ func (api *P2PFSAPI) Whohas(args *WhohasArgs, reply *WhohasReply) error {
 	api.node.providersLock.RLock()
 	defer api.node.providersLock.RUnlock()
 
-	peers := api.node.Providers[args.Filename]
-	for pid := range peers {
-		reply.Peers = append(reply.Peers, pid.String())
+	peers := api.node.Providers[args.CID]
+	for pid, record := range peers {
+		reply.Providers = append(reply.Providers, ProviderInfo{
+			PeerID:   pid.String(),
+			Filename: record.Filename,
+			Size:     record.Size,
+		})
 	}
 	return nil
 }
 
 func (api *P2PFSAPI) Fetch(args *FetchArgs, reply *FetchReply) error {
-	err := api.node.doFetch(args.Filename, args.PeerID)
+	err := api.node.doFetch(args.CID, args.PeerID)
 	if err == nil {
 		reply.Success = true
 	}

@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -21,19 +22,34 @@ type PeerProvider struct {
 	LastSeen time.Time
 }
 
+type LocalFileRecord struct {
+	CID      string
+	Filename string
+	Path     string
+	Size     int64
+}
+
+type RemoteFileRecord struct {
+	CID      string
+	Filename string
+	Size     int64
+	Info     peer.AddrInfo
+	LastSeen time.Time
+}
+
 // Node represents the local p2pfs daemon
 type Node struct {
 	ctx            context.Context // ctx and cancel are used to manage the lifecycle of daemons.
 	cancel         context.CancelFunc
-	Host           host.Host                           // core engine provided by libp2p, representing your presence on the network.
-	ExportDir      string                              // local path to the folder where shared files live.
-	RpcSocket      string                              // path to the local Unix Domain Socket used for CLI commands.
-	Providers      map[string]map[peer.ID]PeerProvider // filename -> Peer ID -> PeerProvider Info.
-	providersLock  sync.RWMutex                        // prevents race conditions when accessing the Providers map. maps are not thread-safe in Go.
-	LocalFiles     map[string]int64                    // cache of files currently in your ExportDir, mapping filename to size in bytes.
-	localFilesLock sync.RWMutex                        // prevents race conditions when accessing the LocalFiles map.
-	PubSub         *pubsub.PubSub                      // GossipSub for announcing and discovering files.
-	rpcListener    net.Listener                        // rpcListener holds the open Unix Domain Socket listener for CLI clients.
+	Host           host.Host                               // core engine provided by libp2p, representing your presence on the network.
+	ExportDir      string                                  // local path to the folder where shared files live.
+	RpcSocket      string                                  // path to the local Unix Domain Socket used for CLI commands.
+	Providers      map[string]map[peer.ID]RemoteFileRecord // CID -> Peer ID -> remote file metadata.
+	providersLock  sync.RWMutex                            // prevents race conditions when accessing the Providers map. maps are not thread-safe in Go.
+	LocalFiles     map[string]LocalFileRecord              // cache of local files, keyed by CID so content is the identity.
+	localFilesLock sync.RWMutex                            // prevents race conditions when accessing the LocalFiles map.
+	PubSub         *pubsub.PubSub                          // GossipSub for announcing and discovering files.
+	rpcListener    net.Listener                            // rpcListener holds the open Unix Domain Socket listener for CLI clients.
 }
 
 // NewNode initializes a new libp2p node, connects to bootstrap nodes, and starts background tasks
@@ -55,8 +71,8 @@ func NewNode(listenAddr, exportDir, rpcSocket string, bootstrapAddrs []string) (
 		Host:       h,
 		ExportDir:  exportDir,
 		RpcSocket:  rpcSocket,
-		Providers:  make(map[string]map[peer.ID]PeerProvider),
-		LocalFiles: make(map[string]int64),
+		Providers:  make(map[string]map[peer.ID]RemoteFileRecord),
+		LocalFiles: make(map[string]LocalFileRecord),
 	}
 
 	log.Printf("Host created. Our Peer ID: %s", h.ID().String())
@@ -181,7 +197,7 @@ func (n *Node) updateLocalFiles() {
 		return
 	}
 
-	newFiles := make(map[string]int64)
+	newFiles := make(map[string]LocalFileRecord)
 	for _, f := range files {
 		if f.IsDir() {
 			continue
@@ -190,7 +206,20 @@ func (n *Node) updateLocalFiles() {
 		if err != nil {
 			continue
 		}
-		newFiles[f.Name()] = info.Size()
+
+		path := filepath.Join(n.ExportDir, f.Name())
+		cid, err := ComputeCID(path)
+		if err != nil {
+			log.Printf("Error computing CID for %s: %v", f.Name(), err)
+			continue
+		}
+
+		newFiles[cid] = LocalFileRecord{
+			CID:      cid,
+			Filename: f.Name(),
+			Path:     path,
+			Size:     info.Size(),
+		}
 	}
 
 	n.localFilesLock.Lock()

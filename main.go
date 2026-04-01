@@ -54,9 +54,9 @@ func printUsage() {
 	fmt.Println("Usage: p2pfs <command> [options]")
 	fmt.Println("Commands:")
 	fmt.Println("  daemon  Run the p2pfs daemon")
-	fmt.Println("  whohas  Find who has a specific file")
-	fmt.Println("  fetch   Download a file")
-	fmt.Println("  list    List files served by a peer")
+	fmt.Println("  whohas  Find who has a specific CID")
+	fmt.Println("  fetch   Download content by CID")
+	fmt.Println("  list    List files served by a peer with filenames and CIDs")
 }
 
 func runDaemon(args []string) {
@@ -119,26 +119,26 @@ func runWhohas(args []string) {
 	fs.Parse(args)
 
 	if fs.NArg() < 1 {
-		fmt.Println("Usage: p2pfs whohas [--rpc <socket>] <filename>")
+		fmt.Println("Usage: p2pfs whohas [--rpc <socket>] <cid>")
 		os.Exit(1)
 	}
 
-	filename := fs.Arg(0)
-	fmt.Printf("Querying who has: %s\n", filename)
+	cid := fs.Arg(0)
+	fmt.Printf("Querying who has CID: %s\n", cid)
 
 	// connect to daemon to issue commands
 	client := NewClient(*rpcOpt)
-	peers, err := client.Whohas(filename)
+	providers, err := client.Whohas(cid)
 
 	if err != nil {
 		log.Fatalf("Error: %v", err)
 	}
-	if len(peers) == 0 {
+	if len(providers) == 0 {
 		fmt.Println("No providers found.")
 	} else {
-		fmt.Printf("Providers for %s:\n", filename)
-		for _, p := range peers {
-			fmt.Printf("  %s\n", p)
+		fmt.Printf("Providers for %s:\n", cid)
+		for _, p := range providers {
+			fmt.Printf("  %s  filename=%s  size=%d\n", p.PeerID, p.Filename, p.Size)
 		}
 	}
 }
@@ -151,16 +151,16 @@ func runFetch(args []string) {
 	fs.Parse(args)
 
 	if fs.NArg() < 1 {
-		fmt.Println("Usage: p2pfs fetch <filename> [--from <peer_id>]")
+		fmt.Println("Usage: p2pfs fetch <cid> [--from <peer_id>]")
 		os.Exit(1)
 	}
-	filename := fs.Arg(0)
+	cid := fs.Arg(0)
 
-	log.Printf("Fetching: %s", filename)
+	log.Printf("Fetching CID: %s", cid)
 	client := NewClient(*rpcOpt)
 
 	startTime := time.Now()
-	err := client.Fetch(filename, *fromPeer)
+	err := client.Fetch(cid, *fromPeer)
 	if err != nil {
 		log.Fatalf("Fetch failed: %v", err)
 	}
@@ -187,6 +187,6 @@ func runList(args []string) {
 	}
 	fmt.Println("Files served:")
 	for _, f := range files {
-		fmt.Printf("  - %s\n", f)
+		fmt.Printf("  - %s  %s  %d bytes\n", f.Filename, f.CID, f.Size)
 	}
 }

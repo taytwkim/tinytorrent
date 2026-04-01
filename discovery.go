@@ -19,9 +19,15 @@ const announceTopic = "p2pfs/announce/1.0.0"
 
 // Announcement is the JSON payload sent over GossipSub
 type Announcement struct {
-	PeerID     string   `json:"peer_id"`
-	Multiaddrs []string `json:"multiaddrs"`
-	Files      []string `json:"files"`
+	PeerID     string          `json:"peer_id"`
+	Multiaddrs []string        `json:"multiaddrs"`
+	Files      []AnnouncedFile `json:"files"`
+}
+
+type AnnouncedFile struct {
+	CID      string `json:"cid"`
+	Filename string `json:"filename"`
+	Size     int64  `json:"size"`
 }
 
 func (n *Node) setupDiscovery() error {
@@ -68,9 +74,13 @@ func (n *Node) announceLoop(topic *pubsub.Topic) {
 
 func (n *Node) broadcastAnnounce(topic *pubsub.Topic) {
 	n.localFilesLock.RLock()
-	var files []string
-	for f := range n.LocalFiles {
-		files = append(files, f)
+	var files []AnnouncedFile
+	for _, file := range n.LocalFiles {
+		files = append(files, AnnouncedFile{
+			CID:      file.CID,
+			Filename: file.Filename,
+			Size:     file.Size,
+		})
 	}
 	n.localFilesLock.RUnlock()
 
@@ -135,15 +145,17 @@ func (n *Node) listenLoop(sub *pubsub.Subscription) {
 
 		// Update providers index
 		n.providersLock.Lock()
+
 		for _, file := range ann.Files {
-			if n.Providers[file] == nil {
-				n.Providers[file] = make(map[peer.ID]PeerProvider)
+			if n.Providers[file.CID] == nil {
+				n.Providers[file.CID] = make(map[peer.ID]RemoteFileRecord)
 			}
 
-			// We only need the peer ID for routing in libp2p usually,
-			// but storing Full AddrInfo is good given we have Multiaddrs.
-			n.Providers[file][pid] = PeerProvider{
-				Info:     peer.AddrInfo{ID: pid, Addrs: maddrList}, // Simplified for MVP; real app would parse Multiaddrs into Info.Addrs
+			n.Providers[file.CID][pid] = RemoteFileRecord{
+				CID:      file.CID,
+				Filename: file.Filename,
+				Size:     file.Size,
+				Info:     peer.AddrInfo{ID: pid, Addrs: maddrList},
 				LastSeen: time.Now(),
 			}
 		}
