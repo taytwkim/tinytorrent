@@ -96,3 +96,21 @@ Once the daemon is up and connected to the DHT through its bootstrap peers, cont
 ```bash
 ./p2pfs list --peer <REMOTE_MULTIADDR>
 ```
+
+## Cross-VM Demo
+
+GCP Terraform files for a simple 3-VM demo environment live under [demo/gcp](/Users/taykim/Desktop/p2p/demo/gcp).
+
+The Terraform in `demo/gcp` is intentionally minimal. It creates the VMs, network, and firewall rules, but leaves app installation and binary deployment to you.
+
+Suggested flow:
+
+1. `cd demo/gcp`
+2. `cp terraform.tfvars.example terraform.tfvars`
+3. Fill in your GCP project and preferred zone.
+4. `terraform init`
+5. `terraform apply`
+6. SSH into the three VMs with the `gcloud compute ssh ...` commands from Terraform outputs.
+7. Manually copy or clone the app onto the VMs and run `./p2pfs shell ...` for the live demo.
+
+Use `terraform destroy` when you are done.

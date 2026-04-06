@@ -1,8 +1,8 @@
-# Demo Automation
+# Demo
 
 This directory contains demo assets for `p2pfs`.
 
-## RPC Demo Script
+## RPC Demo
 
 To run the daemon + RPC demo (which spins up Peer A, Peer B, and Peer C, and generates a test `foo.txt` file):
 ```bash
@@ -39,11 +39,13 @@ along with a firewall rule that opens:
 - `tcp:22` for SSH
 - `tcp:4001-4010` for libp2p demo traffic
 
-After `terraform apply`, each VM will already have:
+The Terraform stack is intentionally minimal:
 
-- a recent Go toolchain installed
-- this repo cloned into `/opt/p2pfs`
-- a built `/opt/p2pfs/p2pfs` binary
+- it creates the VMs
+- it creates the network and firewall rules
+- it does not install Go
+- it does not clone the repo
+- it does not build `p2pfs`
 
 Suggested flow:
 
@@ -53,6 +55,6 @@ Suggested flow:
 4. `terraform init`
 5. `terraform apply`
 6. SSH into the three VMs with the `gcloud compute ssh ...` commands from Terraform outputs.
-7. SSH into the VMs and run the demo from `/opt/p2pfs`.
+7. Manually copy or clone the app onto the VMs, then run the demo.
 
 Use `terraform destroy` when you are done.
