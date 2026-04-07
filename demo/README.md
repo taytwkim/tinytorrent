@@ -6,6 +6,7 @@ This directory contains demo assets.
 
 To run the local RPC demo (which spins up Peer A, Peer B, and Peer C, and generates a test `foo.txt` file):
 ```bash
+# run from project root
 ./demo/rpc_demo.sh start
 ```
 

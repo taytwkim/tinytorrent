@@ -10,7 +10,9 @@ The network operates on two primary protocols:
 
 - **Index Protocol (`/p2pfs/index/1.0.0`)**: Stream-based request protocol allowing peers to manually verify what files a target peer is serving.
 
-It uses libp2p's **Kademlia DHT** for content routing. Each file is identified by a CID derived from its raw bytes. Nodes periodically scan their local export directory and register themselves as providers for any newly discovered CIDs, letting other peers locate content on demand.
+It uses libp2p's **Kademlia DHT** for content routing. Each file is identified by a CID derived from its content (raw bytes). 
+
+Nodes periodically scan their local export directory and register themselves as providers for any newly discovered CIDs, letting other peers locate content on demand.
 
 ## Getting Started
 
@@ -23,10 +25,10 @@ go build -o p2pfs
 
 The `p2pfs` binary supports two usage patterns:
 
-- **Interactive shell mode**: Start a node in the foreground and type commands directly into a REPL.
-- **Daemon + RPC mode**: Start a node in the background and control it by issuing stateless requests over a local UNIX RPC socket.
+- **Interactive shell**: Start a node in the foreground and type commands directly into a REPL.
+- **Daemon + RPC**: Start a node in the background and control it by issuing stateless requests over a local UNIX RPC socket.
 
-## Mode 1: Interactive Shell
+### Mode 1: Interactive Shell
 
 Run a node in the foreground:
 
@@ -40,7 +42,7 @@ To join an existing network, add `--bootstrap`:
 ./p2pfs shell --listen /ip4/127.0.0.1/tcp/4002 --export_dir ./my_files --name peerB --bootstrap <P2P_MULTIADDR_FROM_SEED>
 ```
 
-### Interactive Commands
+**Interactive Commands**
 
 - `help`: Show available shell commands.
 - `id`: Show this node's peer ID and listen addresses.
@@ -59,9 +61,9 @@ To join an existing network, add `--bootstrap`:
 - `clear`: Clear the terminal screen.
 - `exit`: Quit the interactive shell.
 
-## Mode 2: Daemon + Control Over RPC
+### Mode 2: Daemon + Control Over RPC
 
-### Start a Daemon
+**Start a Daemon**
 
 Start a node in the background.
 
@@ -69,7 +71,7 @@ Start a node in the background.
 ./p2pfs daemon -listen /ip4/127.0.0.1/tcp/4001 -export_dir ./my_files
 ```
 
-### Bootstrapping
+**Bootstrapping**
 
 To bootstrap a new daemon, pass a comma-separated list of known `/ip4/.../p2p/<PeerID>` multiaddresses to the `-bootstrap` flag.
 
@@ -77,7 +79,7 @@ To bootstrap a new daemon, pass a comma-separated list of known `/ip4/.../p2p/<P
 ./p2pfs daemon -listen /ip4/127.0.0.1/tcp/4002 -export_dir ./my_files -bootstrap <P2P_MULTIADDR_FROM_SEED>
 ```
 
-### CLI Commands
+**CLI Commands**
 
 Once the daemon is up and connected to the DHT through its bootstrap peers, control it with the CLI:
 
