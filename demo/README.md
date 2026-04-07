@@ -1,6 +1,6 @@
 # Demo
 
-This directory contains assets for demos.
+This directory contains demo assets.
 
 ## Local RPC Demo
 

@@ -1,8 +1,10 @@
 # Peer-to-Peer File Sharing Network
 
+A small working prototype of a P2P file sharing network.
+
 ## Overview
 
-The project currently includes two primary protocols:
+The network operates on two primary protocols:
 
 - **Transfer Protocol (`/p2pfs/get/1.0.0`)**: Stream-based protocol handling file downloads.
 
@@ -22,7 +24,7 @@ go build -o p2pfs
 The `p2pfs` binary supports two usage patterns:
 
 - **Interactive shell mode**: Start a node in the foreground and type commands directly into a REPL.
-- **Daemon + RPC mode**: Start a node in the background and control it with stateless CLI commands over a local UNIX RPC socket.
+- **Daemon + RPC mode**: Start a node in the background and control it by issuing stateless requests over a local UNIX RPC socket.
 
 ## Mode 1: Interactive Shell
 
@@ -57,11 +59,11 @@ To join an existing network, add `--bootstrap`:
 - `clear`: Clear the terminal screen.
 - `exit`: Quit the interactive shell.
 
-## Mode 2: RPC CLI
+## Mode 2: Daemon + Control Over RPC
 
 ### Start a Daemon
 
-A node can share files in its `export_dir`.
+Start a node in the background.
 
 ```bash
 ./p2pfs daemon -listen /ip4/127.0.0.1/tcp/4001 -export_dir ./my_files
@@ -80,6 +82,7 @@ To bootstrap a new daemon, pass a comma-separated list of known `/ip4/.../p2p/<P
 Once the daemon is up and connected to the DHT through its bootstrap peers, control it with the CLI:
 
 - `whohas`: Ask the local daemon to query the DHT for peers that provide a specific CID.
+
 ```bash
 ./p2pfs whohas <CID>
 ```
