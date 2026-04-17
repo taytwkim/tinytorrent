@@ -198,20 +198,21 @@ func (n *Node) finishChunkedFetch(r io.Reader, manifestCID string, resp Transfer
 // This is the part that makes chunk downloading parallel: a few worker goroutines pull chunk jobs from
 // a shared queue until all chunks have been fetched.
 func (n *Node) fetchManifestChunks(manifest *Manifest, targetPeerID string, status func(format string, args ...any)) error {
-	if len(manifest.Chunks) == 0 {
+	chunksToFetch := uniqueChunksByCID(manifest.Chunks)
+	if len(chunksToFetch) == 0 {
 		return nil
 	}
 
 	// Keep the demo simple: at most four chunks are downloaded at the same time.
 	parallelism := 4
-	if len(manifest.Chunks) < parallelism {
-		parallelism = len(manifest.Chunks)
+	if len(chunksToFetch) < parallelism {
+		parallelism = len(chunksToFetch)
 	}
 
 	// jobs is the queue of chunks to fetch.
 	// errCh collects worker errors so the caller can fail the whole download if any chunk fails.
 	jobs := make(chan ManifestChunk)
-	errCh := make(chan error, len(manifest.Chunks))
+	errCh := make(chan error, len(chunksToFetch))
 	var wg sync.WaitGroup
 
 	// Start worker goroutines.
@@ -230,7 +231,7 @@ func (n *Node) fetchManifestChunks(manifest *Manifest, targetPeerID string, stat
 	}
 
 	// Send every chunk to the workers.
-	for _, chunk := range manifest.Chunks {
+	for _, chunk := range chunksToFetch {
 		jobs <- chunk
 	}
 	close(jobs)
@@ -244,6 +245,20 @@ func (n *Node) fetchManifestChunks(manifest *Manifest, targetPeerID string, stat
 		}
 	}
 	return nil
+}
+
+// Takes a list of manifest chunks and returns a new list where each chunk CID appears only once.
+func uniqueChunksByCID(chunks []ManifestChunk) []ManifestChunk {
+	uniqueChunks := make([]ManifestChunk, 0, len(chunks))
+	seen := make(map[string]struct{}, len(chunks))
+	for _, chunk := range chunks {
+		if _, ok := seen[chunk.CID]; ok {
+			continue
+		}
+		seen[chunk.CID] = struct{}{}
+		uniqueChunks = append(uniqueChunks, chunk)
+	}
+	return uniqueChunks
 }
 
 // fetchOneChunk downloads one chunk and stores it in the local chunk cache.

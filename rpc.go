@@ -150,8 +150,18 @@ func (n *Node) startRPCServer() error {
 	rpcServer := rpc.NewServer()
 	rpcServer.Register(api)
 
-	// Clean up old socket if it exists.
-	os.Remove(n.RpcSocket)
+	// Clean up an old Unix socket if it exists, but do not remove regular
+	// files accidentally when the user passes the wrong --rpc path.
+	if info, err := os.Lstat(n.RpcSocket); err == nil {
+		if info.Mode()&os.ModeSocket == 0 {
+			return fmt.Errorf("rpc path exists and is not a Unix socket: %s", n.RpcSocket)
+		}
+		if err := os.Remove(n.RpcSocket); err != nil {
+			return fmt.Errorf("failed to remove stale RPC socket %s: %w", n.RpcSocket, err)
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("failed to inspect RPC socket path %s: %w", n.RpcSocket, err)
+	}
 
 	l, err := net.Listen("unix", n.RpcSocket)
 	if err != nil {
