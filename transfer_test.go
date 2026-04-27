@@ -82,6 +82,51 @@ func TestRankPiecesRarestFirst(t *testing.T) {
 	}
 }
 
+// Verifies that a brand-new download starts with one random bootstrap piece
+// instead of immediately scheduling the full rarest-first list.
+func TestSchedulePiecesForRoundBootstrapsWithOneRandomPiece(t *testing.T) {
+	pieces := []ManifestPiece{
+		{Index: 0, CID: "piece-0"},
+		{Index: 1, CID: "piece-1"},
+		{Index: 2, CID: "piece-2"},
+	}
+	pieceSources := map[string][]peer.ID{
+		"piece-0": {peer.ID("peer-a"), peer.ID("peer-b")},
+		"piece-1": {peer.ID("peer-a")},
+		"piece-2": {peer.ID("peer-a"), peer.ID("peer-b"), peer.ID("peer-c")},
+	}
+
+	scheduled := schedulePiecesForRound(pieces, pieceSources, false)
+	if len(scheduled) != 1 {
+		t.Fatalf("scheduled %d bootstrap pieces, want 1", len(scheduled))
+	}
+
+	chosen := scheduled[0].CID
+	if chosen != "piece-0" && chosen != "piece-1" && chosen != "piece-2" {
+		t.Fatalf("bootstrap piece = %q, want one of the missing pieces", chosen)
+	}
+}
+
+// Verifies that once we already have a verified piece, scheduling returns to
+// the normal rarest-first ordering.
+func TestSchedulePiecesForRoundUsesRarestFirstAfterBootstrap(t *testing.T) {
+	pieces := []ManifestPiece{
+		{Index: 0, CID: "piece-0"},
+		{Index: 1, CID: "piece-1"},
+		{Index: 2, CID: "piece-2"},
+	}
+	pieceSources := map[string][]peer.ID{
+		"piece-0": {peer.ID("peer-a"), peer.ID("peer-b")},
+		"piece-1": {peer.ID("peer-a")},
+		"piece-2": {peer.ID("peer-a"), peer.ID("peer-b"), peer.ID("peer-c")},
+	}
+
+	scheduled := schedulePiecesForRound(pieces, pieceSources, true)
+	if scheduled[0].CID != "piece-1" || scheduled[1].CID != "piece-0" || scheduled[2].CID != "piece-2" {
+		t.Fatalf("scheduled pieces = %#v", scheduled)
+	}
+}
+
 // Verifies that peer choice explores unknown peers before using measured
 // download rates, then falls back to the fastest known peer.
 func TestChoosePeerForPiecePrefersUnknownThenFastestKnown(t *testing.T) {

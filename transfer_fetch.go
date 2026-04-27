@@ -213,10 +213,12 @@ func (n *Node) fetchFile(r io.Reader, manifestCID string, resp TransferResponse,
  * A “round” here means one full pass over the current missingPieces list.
  */
 func (n *Node) fetchMissingPieces(manifestCID string, manifest *Manifest, status func(format string, args ...any)) error {
+	allPieces := removeDuplicatePieces(manifest.Pieces)
+
 	for {
 		// First, trust the local cache before the network. Anything already
 		// verified on disk drops out of the round.
-		missingPieces := n.findMissingPieces(manifestCID, removeDuplicatePieces(manifest.Pieces), status)
+		missingPieces := n.findMissingPieces(manifestCID, allPieces, status)
 		if len(missingPieces) == 0 {
 			return nil
 		}
@@ -228,8 +230,11 @@ func (n *Node) fetchMissingPieces(manifestCID string, manifest *Manifest, status
 			return err
 		}
 
-		// Order the work rarest-first so the hardest-to-find pieces are prioritized
-		missingPieces = rankPiecesRarestFirst(missingPieces, pieceSources)
+		// if everything is still missing, we know we have zero verified pieces.
+		// In that case, bootstrap with one random piece first.
+		// Once we have at least one piece, fall back to the normal rarest-first order.
+		hasAnyVerifiedPiece := len(missingPieces) != len(allPieces)
+		missingPieces = schedulePiecesForRound(missingPieces, pieceSources, hasAnyVerifiedPiece)
 
 		// Every piece in this round must have at least one reported provider.
 		// If not, the manifest is incomplete from the swarm's point of view.

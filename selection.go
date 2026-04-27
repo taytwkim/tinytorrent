@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/rand"
 	"sort"
 	"time"
 
@@ -30,6 +31,24 @@ func rankPiecesRarestFirst(pieces []ManifestPiece, pieceSources map[string][]pee
 		return ranked[i].Index < ranked[j].Index
 	})
 	return ranked
+}
+
+// schedulePiecesForRound decides how this download round should start.
+//
+// If we already have at least one verified piece locally, we keep the normal
+// rarest-first behavior.
+//
+// If we have zero verified pieces, we do a one-piece bootstrap round first.
+// That gives us one complete piece quickly, and then the next round falls back
+// to normal rarest-first scheduling.
+func schedulePiecesForRound(pieces []ManifestPiece, pieceSources map[string][]peer.ID, hasAnyVerifiedPiece bool) []ManifestPiece {
+	if hasAnyVerifiedPiece || len(pieces) <= 1 {
+		return rankPiecesRarestFirst(pieces, pieceSources)
+	}
+
+	// When we have nothing yet, choose one missing piece at random so we can
+	// finish a complete piece before starting the full parallel rarest-first flow.
+	return []ManifestPiece{pieces[rand.Intn(len(pieces))]}
 }
 
 // choosePeerForPiece picks one provider for one piece for this manifest.

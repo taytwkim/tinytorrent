@@ -1,6 +1,6 @@
 # TinyTorrent
 
-A small working prototype of a P2P file sharing network (BitTorrent).
+A small functional prototype of a P2P file sharing system that implements the core ideas of BitTorrent.
 
 ## Getting Started
 
@@ -34,7 +34,6 @@ Create or update a file from inside the shell and inspect the local catalog:
 ```text
 peerA> echo "hello from peer A" > foo.txt
 peerA> files
-peerA> id
 ```
 
 To join an existing network, start another shell with `--bootstrap` pointing at a known `/ip4/.../p2p/<PeerID>` multiaddr:
