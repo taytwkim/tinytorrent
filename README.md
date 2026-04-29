@@ -5,7 +5,7 @@ A small P2P file sharing system that implements the core ideas of BitTorrent.
 ## Overview
 
 * **Chunked Transfers**: Files are chunked into smaller pieces and downloaded incrementally.
-* **Peer Discovery**: Kademlia DHT integration allows peers to discover the swarm for in a requested file.
+* **Peer Discovery**: Kademlia DHT integration allows peers to discover the swarm providing a requested file.
 * **Download Scheduling**: Rarest-first piece selection improves file availability.
 * **Provider Selection**: Among available providers, choose providers with the best observed download rates.
 * **Choking-Based Incentives**: Peers limit uploads through choking to encourage reciprocal sharing.
