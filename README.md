@@ -25,11 +25,13 @@ Build the binary:
 go build -o tinytorrent .
 ```
 
-Run the test suite:
+To run the test suite:
 
 ```bash
 go test ./...
 ```
+
+---
 
 The `tinytorrent` binary supports two ways of running a node:
 
