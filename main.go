@@ -154,7 +154,7 @@ func runFetch(args []string) {
 	fs.Parse(args)
 
 	if fs.NArg() < 1 {
-		fmt.Println("Usage: tinytorrent fetch <manifest-cid>")
+		fmt.Println("Usage: tinytorrent fetch [--rpc <socket>] <manifest-cid>")
 		os.Exit(1)
 	}
 	cid := fs.Arg(0)
@@ -181,7 +181,7 @@ func runList(args []string) {
 	fs.Parse(args)
 
 	if *peerAddr == "" {
-		fmt.Println("Usage: tinytorrent list --peer <multiaddr>")
+		fmt.Println("Usage: tinytorrent list [--rpc <socket>] --peer <multiaddr>")
 		os.Exit(1)
 	}
 

@@ -28,6 +28,8 @@ To clean up the spawned log files, temp socket files, `export` directories, and 
 
 ### UI
 
+![Demo UI](../img/demo.png)
+
 After running `./demo/local/local_demo.sh start`, you can also navigate the demo through a UI.
 
 Run `./tinytorrent` dashboard to start the dashboard HTTP server.

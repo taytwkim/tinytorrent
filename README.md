@@ -1,19 +1,21 @@
 # TinyTorrent
 
-A small P2P file sharing system that implements the core ideas of BitTorrent.
+A P2P file sharing system that implements the core ideas of BitTorrent.
 
 ## Overview
 
-* **Chunked Transfers**: Files are chunked into smaller pieces and downloaded incrementally.
+* **Chunked Transfers**: Files are chunked into smaller pieces and downloaded concurrently.
 * **Peer Discovery**: Kademlia DHT integration allows peers to discover the swarm providing a requested file.
 * **Download Scheduling**: Rarest-first piece selection improves file availability.
-* **Provider Selection**: Among available providers, choose providers with the best observed download rates.
-* **Choking-Based Incentives**: Peers limit uploads through choking to encourage reciprocal sharing.
-* **File Integrity**: Hashing detects corrupted pieces.
+* **Provider Selection**: Among available providers, choose one with the best observed download rate.
+* **Choking-Based Incentives**: Peers limit uploads through choking and drives fair resource allocation.
+* **File Integrity**: Hashing detects corrupted file pieces.
 
 ## Demo
 
-See `/demo` for a guided demo of the system in action.
+See `demo/` for a guided demo of the system in action.
+
+![Demo UI](./img/demo.png)
 
 ## Usage
 
@@ -23,7 +25,7 @@ Build the binary:
 go build -o tinytorrent .
 ```
 
-Run the test suite any time with:
+Run the test suite:
 
 ```bash
 go test ./...
@@ -97,22 +99,27 @@ To bootstrap a new node, pass a comma-separated list of known `/ip4/.../p2p/<Pee
 
 **CLI Commands**
 
-Once the daemon is up and connected to the DHT through its bootstrap peers, control it with the CLI:
+Once the daemon is up and connected to the DHT through its bootstrap peers, control it with the CLI over the daemon's RPC socket. 
+
+If the daemon is using the default socket at `/tmp/tinytorrent.sock`, the commands below work as-is. If the daemon was started with a custom `-rpc` path, pass the matching `--rpc` flag to the CLI.
 
 - `whohas`: Ask the local daemon to query the DHT for peers participating in a manifest swarm.
 
 ```bash
 ./tinytorrent whohas <MANIFEST_CID>
+# or: ./tinytorrent whohas --rpc /tmp/custom.sock <MANIFEST_CID>
 ```
 
 - `fetch`: Tell the daemon to download a file by manifest CID into its local `export_dir`.
 
 ```bash
 ./tinytorrent fetch <MANIFEST_CID>
+# or: ./tinytorrent fetch --rpc /tmp/custom.sock <MANIFEST_CID>
 ```
 
 - `list`: Connect to a remote peer explicitly and use the Index protocol to verify what they are serving, including filename, CID, and size.
 
 ```bash
 ./tinytorrent list --peer <REMOTE_MULTIADDR>
+# or: ./tinytorrent list --rpc /tmp/custom.sock --peer <REMOTE_MULTIADDR>
 ```
